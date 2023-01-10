@@ -199,4 +199,10 @@ async function getConfig() {
   return decoratedConfig;
 }
 
-export default getConfig;
+export {
+  getConfig,
+  getSharepointConfig,
+  fetchConfigJson,
+  getHelixAdminConfig,
+  LOC_CONFIG
+};

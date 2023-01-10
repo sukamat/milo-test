@@ -3,10 +3,7 @@ export default async function init(el) {
   const p = el.querySelector('p');
   const heading = document.createElement('h2');
   heading.textContent = p.textContent;
-  //el.append(heading);
   el.insertAdjacentElement('afterbegin', heading);
-
-
 
 
   const resp = await fetch('/drafts/sukamat/bar-chart.json');
@@ -31,8 +28,6 @@ export default async function init(el) {
 
       div.append(dataHeader, h2, c, ff);
       el.append(div);
-
-
     });
   }
 }

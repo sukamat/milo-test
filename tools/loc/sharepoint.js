@@ -9,7 +9,7 @@
  * OF ANY KIND, either express or implied. See the License for the specific language
  * governing permissions and limitations under the License.
  */
-import getConfig from './config.js';
+import { getConfig } from './config.js';
 
 let accessToken;
 const BATCH_REQUEST_LIMIT = 20;

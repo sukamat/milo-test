@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 import { getDocPathFromUrl, getUrlInfo } from './utils.js';
-import getConfig from './config.js';
+import { getConfig } from './config.js';
 import { getSpFiles } from './sharepoint.js';
 
 const PROJECTS_ROOT_PATH = '/drafts/localization/projects/';

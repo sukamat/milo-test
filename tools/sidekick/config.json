@@ -18,6 +18,15 @@
       "includePaths": [ "**/:x**" ]
     },
     {
+      "id": "hello",
+      "title": "Hello",
+      "environments": [ "edit" ],
+      "url": "/tools/hello/index.html?project=milo--adobecom",
+      "passReferrer": true,
+      "excludePaths": [ "/**" ],
+      "includePaths": [ "**/:x**" ]
+    },
+    {
       "title": "Send to CaaS",
       "id": "sendtocaas",
       "environments": ["dev","preview", "live", "prod"],
