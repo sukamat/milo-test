@@ -125,8 +125,8 @@ async function getProjectData() {
           doc: { filePath: docPath },
           childDoc: { filePath: childDocPath },
         });
-        addOrAppendToMap(filePaths, docPath, url);
-        //addOrAppendToMap(filePaths, childDocPath, url);
+        addOrAppendToMap(filePaths, docPath, `urls|${url}|doc`);
+        addOrAppendToMap(filePaths, childDocPath, `urls|${url}|childDoc`);
       });
       //this.urls = urls;
       //return json;
@@ -170,37 +170,67 @@ async function getProjectData() {
 // }
 
 async function copyFilesToChildFolder() {
-  loadingON('button clicked');
 
-  const status = { success: false };
-  try {
-    const srcPath = urlInfo?.doc?.filePath;
-    loadingON(`Copying ${srcPath} to child`);
-
-    // let copySuccess = false;
-    // if (urlInfo?.doc?.sp?.status !== 200) {
-    //   const destinationFolder = `/langstore/en${srcPath.substring(0, srcPath.lastIndexOf('/'))}`;
-    //   copySuccess = await copyFile(srcPath, destinationFolder);
-    //   updateAndDisplayCopyStatus(copySuccess, srcPath);
-    // } else {
-    //   const file = await getFile(urlInfo.doc);
-    //   if (file) {
-    //     const destination = urlInfo?.langstoreDoc?.filePath;
-    //     if (destination) {
-    //       const saveStatus = await saveFile(file, destination);
-    //       if (saveStatus.success) {
-    //         copySuccess = true;
-    //       }
-    //     }
-    //   }
-    //   updateAndDisplayCopyStatus(copySuccess, srcPath);
-    // }
-
-
-  } catch (error) {
-    console.log(`Error occurred when trying to copy to child folder ${error.message}`);
+  function updateAndDisplayCopyStatus(copyStatus, srcPath) {
+    let copyDisplayText = `Copied ${srcPath} to /child folder`;
+    if (!copyStatus) {
+      copyDisplayText = `Failed to copy ${srcPath} to /child folder`;
+    }
+    loadingON(copyDisplayText);
   }
 
+  //loadingON('button clicked');
+
+  async function copyFileToChild(urlInfo) {
+    const status = { success: false };
+    try {
+      const srcPath = urlInfo?.doc?.filePath;
+      loadingON(`Copying ${srcPath} to /child folder`);
+      // Conflict behaviour replace for copy not supported in one drive, hence if file exists,
+      // then use saveFile.
+      let copySuccess = false;
+      if (urlInfo?.childDoc?.sp?.status !== 200) {
+        const destinationFolder = `${srcPath.substring(0, srcPath.lastIndexOf('/'))}/child`;
+        copySuccess = await copyFile(srcPath, destinationFolder);
+        updateAndDisplayCopyStatus(copySuccess, srcPath);
+      } else {
+        const file = await getFile(urlInfo.doc);
+        if (file) {
+          const destination = urlInfo?.childDoc?.filePath;
+          if (destination) {
+            const saveStatus = await saveFile(file, destination);
+            if (saveStatus.success) {
+              copySuccess = true;
+            }
+          }
+        }
+        updateAndDisplayCopyStatus(copySuccess, srcPath);
+      }
+      status.success = copySuccess;
+      status.srcPath = srcPath;
+      status.dstPath = `${srcPath.substring(0, srcPath.lastIndexOf('/'))}/child/${urlInfo.doc.sp.name}`;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(`Error occurred when trying to copy to child folder ${error.message}`);
+    }
+    return status;
+  }
+
+  const copyStatuses = await Promise.all(
+    [...projectDetail.urls].map(((valueArray) => copyFileToChild(valueArray[1]))),
+  );
+  const failedCopies = copyStatuses
+    .filter((status) => !status.success)
+    .map((status) => status?.srcPath || 'Path Info Not available');
+
+  if (failedCopies.length > 0 /*|| failedPreviews.length > 0*/) {
+    let failureMessage = failedCopies.length > 0 ? `Failed to copy ${failedCopies} to child folder` : '';
+    //failureMessage = failedPreviews.length > 0 ? `${failureMessage} Failed to preview ${failedPreviews}. Kindly manually preview these files before starting the project` : '';
+    loadingON(failureMessage);
+  } else {
+    loadingOFF();
+    //await refresh();
+  }
 
 }
 
@@ -258,7 +288,7 @@ async function createTableWithHeaders(config) {
   $tr.appendChild(createHeaderColumn('Source File'));
   $tr.appendChild(createHeaderColumn('Destination File'));
   //$tr.appendChild(createHeaderColumn('En Langstore File'));
-  //$tr.appendChild(createHeaderColumn('En Langstore Info'));
+  $tr.appendChild(createHeaderColumn('Copied Page Info'));
   //await appendLanguages($tr, config, projectDetail.englishCopyProjects, 'English Copy');
   //await appendLanguages($tr, config, projectDetail.rolloutProjects, 'Rollout');
   //await appendLanguages($tr, config, projectDetail.translationProjects);
@@ -331,6 +361,14 @@ async function displayProjectDetail() {
     //$tr.appendChild(createColumn(langstoreEnDisplayText));
     //$tr.appendChild(createColumn(langstoreDocStatus.modificationInfo));
     //displayPageStatuses(url, subprojects, langstoreDocExists, $tr);
+
+    const childDocStatus = getSharepointStatus(urlInfo.childDoc);
+    const childDocDisplayText = getLinkOrDisplayText(spViewUrl, childDocStatus);
+    const childDocExists = childDocStatus.hasSourceFile;
+    $tr.appendChild(createColumn(childDocDisplayText));
+    $tr.appendChild(createColumn(childDocStatus.modificationInfo));
+    //displayPageStatuses(url, subprojects, childDocExists, $tr);
+
     $table.appendChild($tr);
   });
 
@@ -360,8 +398,12 @@ async function displayProjectDetail() {
   //hideButtons(hideIds);
 }
 
+
+// this function is same as the one in loc project.js 
+// except the usage of filePaths object in projectDetail
+// ideally it can be reused from loc
 async function updateProjectWithDocs(projectDetail) {
-  if (!projectDetail) {
+  if (!projectDetail || !projectDetail?.filePaths) {
     return;
   }
   const { filePaths } = projectDetail;
@@ -374,69 +416,24 @@ async function updateProjectWithDocs(projectDetail) {
         const filePath = docPaths[file.id];
         const spFileStatus = file.status;
         const fileBody = spFileStatus === 200 ? file.body : {};
-        // const referencePositions = filePaths.get(filePath);
-        // referencePositions.forEach((referencePosition) => {                    
-        //   let position = projectDetail;
-        //   keys.forEach((key) => {
-        //     position = position[key] || position.get(key);
-        //   });
-        //   position.sp = fileBody;
-        //   position.sp.status = spFileStatus;
-        //   }
-        // });  
-        console.log('updateProjectWithDocs() - spfiles loop');
-        console.log(file);
-        console.log(filePath);
-        console.log(spFileStatus);
-
-        const url = filePaths.get(filePath);
-        let pd = projectDetail;
-        const urlsData = pd['urls'] || pd.get('urls');
-        const urlsObjet = urlsData.get(url[0]);
-        let docObject = urlsObjet['doc'];
-        docObject.sp = fileBody;
-        docObject.sp.status = spFileStatus;
+        const referencePositions = filePaths.get(filePath);
+        referencePositions.forEach((referencePosition) => {
+          const keys = referencePosition.split('|');
+          if (keys && keys.length > 0) {
+            let position = projectDetail;
+            keys.forEach((key) => {
+              position = position[key] || position.get(key);
+            });
+            position.sp = fileBody;
+            position.sp.status = spFileStatus;
+          }
+        });
       });
     }
   });
 }
 
 async function init() {
-
-  /*try {
-    setListeners();
-    loadingON('Fetching Config...');
-    const config = await getConfig();
-    if (!config) {
-      return;
-    }
-    loadingON('Config loaded...');
-
-
-
-    // read the data from the URL after clicking the sidekick button
-    //urlInfo = getUrlInfo();
-    //console.log(urlInfo);
-
-    // get path to the data file from sharepoint url
-    loadingON('Fetching Project Data ...');
-    const excelData = await getExcelData();
-    console.log(`excelData.url: ${excelData.url}`);
-    console.log(`excelData.path: ${excelData.path}`);
-    console.log(`excelData.name: ${excelData.name}`);
-    console.log(`excelData.excelPath: ${excelData.excelPath}`);
-
-    // get JSON from the excel file
-    const json = await excelData.getJson();
-
-    console.log(json);
-    console.log('urls in json');
-    console.log(json.urls);
-
-    populateHelloPage(excelData);
-  } catch (error) {
-    loadingON(`Error occurred - ${error.message}`);
-  }*/
 
   try {
     setListeners();
