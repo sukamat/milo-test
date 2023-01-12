@@ -10,6 +10,8 @@ import {
   connect as connectToSP,
   getSpFiles,
   copyFile,
+  saveFile,
+  getFile,
   updateExcelTable,
 } from '../loc/sharepoint.js';
 import {
@@ -51,6 +53,10 @@ async function readDataFile(dataFileUrl) {
     return json;
   }
   return undefined;
+}
+
+function getPinkUrl(url) {
+  return url.replace('main--milo--', 'main--milo-pink--');
 }
 
 function addOrAppendToMap(map, key, value) {
@@ -121,12 +127,26 @@ async function getProjectData() {
         const url = urlRow.urls;
         const docPath = getDocPathFromUrl(url);
         const childDocPath = getChildDocPath(docPath);
+        //const fgDocPath = docPath;
         urls.set(url, {
-          doc: { filePath: docPath },
-          childDoc: { filePath: childDocPath },
+          doc: {
+            filePath: docPath,
+            fg: {
+              url: getPinkUrl(url),
+              sp: {},
+            },
+          },
+          childDoc: {
+            filePath: childDocPath,
+            fg: {
+              url: getPinkUrl(url),
+              sp: {},
+            },
+          }
         });
         addOrAppendToMap(filePaths, docPath, `urls|${url}|doc`);
         addOrAppendToMap(filePaths, childDocPath, `urls|${url}|childDoc`);
+        //addOrAppendToMap(filePaths, fgDocPath, `urls|${url}|fgDoc`);
       });
       //this.urls = urls;
       //return json;
@@ -234,8 +254,74 @@ async function copyFilesToChildFolder() {
 
 }
 
+async function copyFilesToMiloPinkFolder() {
+
+  function updateAndDisplayCopyStatus(copyStatus, srcPath) {
+    let copyDisplayText = `Copied ${srcPath} to pink folder`;
+    if (!copyStatus) {
+      copyDisplayText = `Failed to copy ${srcPath} to pink folder`;
+    }
+    loadingON(copyDisplayText);
+  }
+
+  //loadingON('button clicked');
+
+  async function copyFilesToMiloPink(urlInfo) {
+    const status = { success: false };
+    try {
+      const srcPath = urlInfo?.doc?.filePath;
+      loadingON(`Copying ${srcPath} to pink folder`);
+      // Conflict behaviour replace for copy not supported in one drive, hence if file exists,
+      // then use saveFile.
+      let copySuccess = false;
+      if (urlInfo?.doc?.fg?.sp?.status !== 200) {
+        const destinationFolder = `${srcPath.substring(0, srcPath.lastIndexOf('/'))}`;
+        copySuccess = await copyFile(srcPath, destinationFolder, undefined, true);
+        updateAndDisplayCopyStatus(copySuccess, srcPath);
+      } else {
+        const file = await getFile(urlInfo.doc, true);
+        if (file) {
+          const destination = urlInfo?.doc?.filePath;
+          if (destination) {
+            const saveStatus = await saveFile(file, destination, true);
+            if (saveStatus.success) {
+              copySuccess = true;
+            }
+          }
+        }
+        updateAndDisplayCopyStatus(copySuccess, srcPath);
+      }
+      status.success = copySuccess;
+      status.srcPath = srcPath;
+      status.dstPath = srcPath;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(`Error occurred when trying to copy to pink folder ${error.message}`);
+    }
+    return status;
+  }
+
+  const copyStatuses = await Promise.all(
+    [...projectDetail.urls].map(((valueArray) => copyFilesToMiloPink(valueArray[1]))),
+  );
+  const failedCopies = copyStatuses
+    .filter((status) => !status.success)
+    .map((status) => status?.srcPath || 'Path Info Not available');
+
+  if (failedCopies.length > 0 /*|| failedPreviews.length > 0*/) {
+    let failureMessage = failedCopies.length > 0 ? `Failed to copy ${failedCopies} to child folder` : '';
+    //failureMessage = failedPreviews.length > 0 ? `${failureMessage} Failed to preview ${failedPreviews}. Kindly manually preview these files before starting the project` : '';
+    loadingON(failureMessage);
+  } else {
+    loadingOFF();
+    //await refresh();
+  }
+
+}
+
 function setListeners() {
   document.querySelector('#copyFiles button').addEventListener('click', copyFilesToChildFolder);
+  document.querySelector('#copyFilesToPink button').addEventListener('click', copyFilesToMiloPinkFolder);
   document.querySelector('#loading').addEventListener('click', loadingOFF);
 }
 
@@ -286,9 +372,11 @@ async function createTableWithHeaders(config) {
   const $tr = createRow('header');
   $tr.appendChild(createHeaderColumn('URL'));
   $tr.appendChild(createHeaderColumn('Source File'));
-  $tr.appendChild(createHeaderColumn('Destination File'));
-  //$tr.appendChild(createHeaderColumn('En Langstore File'));
-  $tr.appendChild(createHeaderColumn('Copied Page Info'));
+  $tr.appendChild(createHeaderColumn('Child Folder Copy'));
+  $tr.appendChild(createHeaderColumn('Child Page Info'));
+  $tr.appendChild(createHeaderColumn('Pink Folder Copy'));
+  $tr.appendChild(createHeaderColumn('Pink Page Info'));
+  //$tr.appendChild(createHeaderColumn('En Langstore File'));  
   //await appendLanguages($tr, config, projectDetail.englishCopyProjects, 'English Copy');
   //await appendLanguages($tr, config, projectDetail.rolloutProjects, 'Rollout');
   //await appendLanguages($tr, config, projectDetail.translationProjects);
@@ -309,15 +397,23 @@ function getLinkOrDisplayText(spViewUrl, docStatus) {
   return docStatus.hasSourceFile ? getLinkedPagePath(spViewUrl, pathOrMsg) : pathOrMsg;
 }
 
-function getSharepointStatus(doc) {
+function getSharepointStatus(doc, isPink) {
   let sharepointStatus = 'Connect to Sharepoint';
   let hasSourceFile = false;
   let modificationInfo = 'N/A';
-  if (doc && doc.sp) {
+  if (!isPink && doc && doc.sp) {
     if (doc.sp.status === 200) {
       sharepointStatus = `${doc.filePath}`;
       hasSourceFile = true;
       modificationInfo = `By ${doc.sp?.lastModifiedBy?.user?.displayName} at ${doc.sp?.lastModifiedDateTime}`;
+    } else {
+      sharepointStatus = 'Source file not found!';
+    }
+  } else {
+    if (doc.fg.sp.status === 200) {
+      sharepointStatus = `${doc.filePath}`;
+      hasSourceFile = true;
+      modificationInfo = `By ${doc.fg.sp?.lastModifiedBy?.user?.displayName} at ${doc.fg.sp?.lastModifiedDateTime}`;
     } else {
       sharepointStatus = 'Source file not found!';
     }
@@ -347,6 +443,7 @@ async function displayProjectDetail() {
   const $table = await createTableWithHeaders(config);
   //const spViewUrl = await getSpViewUrl();
   const spViewUrl = config.sp.shareUrl;
+  const fgSpViewUrl = config.sp.fgShareUrl;
 
   projectDetail.urls.forEach((urlInfo, url) => {
     const $tr = createRow();
@@ -368,6 +465,12 @@ async function displayProjectDetail() {
     $tr.appendChild(createColumn(childDocDisplayText));
     $tr.appendChild(createColumn(childDocStatus.modificationInfo));
     //displayPageStatuses(url, subprojects, childDocExists, $tr);
+
+    const fgDocStatus = getSharepointStatus(urlInfo.doc, true);
+    const fgDocDisplayText = getLinkOrDisplayText(fgSpViewUrl, fgDocStatus);
+    const fgDocExists = fgDocStatus.hasSourceFile;
+    $tr.appendChild(createColumn(fgDocDisplayText));
+    $tr.appendChild(createColumn(fgDocStatus.modificationInfo));
 
     $table.appendChild($tr);
   });
@@ -393,7 +496,7 @@ async function displayProjectDetail() {
   //   }
   // }
 
-  const showIds = ['copyFiles'];
+  const showIds = ['copyFiles', 'copyFilesToPink'];
   showButtons(showIds);
   //hideButtons(hideIds);
 }
@@ -431,7 +534,31 @@ async function updateProjectWithDocs(projectDetail) {
       });
     }
   });
+
+  const fgSpBatchFiles = await getSpFiles(docPaths, true);
+  fgSpBatchFiles.forEach((spFiles) => {
+    if (spFiles && spFiles.responses) {
+      spFiles.responses.forEach((file) => {
+        const filePath = docPaths[file.id];
+        const spFileStatus = file.status;
+        const fileBody = spFileStatus === 200 ? file.body : {};
+        const referencePositions = filePaths.get(filePath);
+        referencePositions.forEach((referencePosition) => {
+          const keys = referencePosition.split('|');
+          if (keys && keys.length > 0) {
+            let position = projectDetail;
+            keys.forEach((key) => {
+              position = position[key] || position.get(key);
+            });
+            position.fg.sp = fileBody;
+            position.fg.sp.status = spFileStatus;
+          }
+        });
+      });
+    }
+  });
 }
+
 
 async function init() {
 

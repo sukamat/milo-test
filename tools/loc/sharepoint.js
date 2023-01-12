@@ -87,10 +87,14 @@ const loadSharepointData = (spBatchApi, payload) => {
   return fetch(spBatchApi, options);
 };
 
-function getSharepointFileRequest(spConfig, fileIndex, filePath) {
+function getSharepointFileRequest(spConfig, fileIndex, filePath, isPink) {
+  let baseURI = spConfig.api.file.get.baseURI;
+  if (isPink) {
+    baseURI = spConfig.api.file.get.fgBaseURI;
+  }
   return {
     id: fileIndex,
-    url: `${spConfig.api.file.get.baseURI}${filePath}`.replace(spConfig.api.url, ''),
+    url: `${baseURI}${filePath}`.replace(spConfig.api.url, ''),
     method: 'GET',
   };
 }
@@ -100,7 +104,7 @@ async function getSpViewUrl() {
   return sp.shareUrl;
 }
 
-async function getSpFiles(filePaths) {
+async function getSpFiles(filePaths, isPink) {
   let index = 0;
   const spFilePromises = [];
   const { sp } = await getConfig();
@@ -110,7 +114,7 @@ async function getSpFiles(filePaths) {
     const payload = { requests: [] };
     for (let i = 0; i < BATCH_REQUEST_LIMIT && index < filePaths.length; index += 1, i += 1) {
       const filePath = filePaths[index];
-      payload.requests.push(getSharepointFileRequest(sp, index, filePath));
+      payload.requests.push(getSharepointFileRequest(sp, index, filePath, isPink));
     }
     spFilePromises.push(loadSharepointData(spBatchApi, payload));
   }
@@ -118,22 +122,29 @@ async function getSpFiles(filePaths) {
   return Promise.all(spFileResponses.map((file) => file.json()));
 }
 
-async function getFile(doc) {
-  if (doc && doc.sp && doc.sp.status === 200) {
+async function getFile(doc, isPink) {
+  if (!isPink && doc && doc.sp && doc.sp.status === 200) {
     const response = await fetch(doc.sp['@microsoft.graph.downloadUrl']);
+    return response.blob();
+  } else {
+    const response = await fetch(doc.fg.sp['@microsoft.graph.downloadUrl']);
     return response.blob();
   }
   return undefined;
 }
 
-async function createFolder(folder) {
+async function createFolder(folder, isPink = false) {
   validateConnection();
   const { sp } = await getConfig();
 
   const options = getAuthorizedRequestOption({ method: sp.api.directory.create.method });
   options.body = JSON.stringify(sp.api.directory.create.payload);
 
-  const res = await fetch(`${sp.api.directory.create.baseURI}${folder}`, options);
+  let baseURI = sp.api.directory.create.baseURI;
+  if (isPink) {
+    baseURI = sp.api.directory.create.fgBaseURI;
+  }
+  const res = await fetch(`${baseURI}${folder}`, options);
   if (res.ok) {
     return res.json();
   }
@@ -151,7 +162,7 @@ function getFileNameFromPath(path) {
   return path.split('/').pop().split('/').pop();
 }
 
-async function createUploadSession(sp, file, dest, filename) {
+async function createUploadSession(sp, file, dest, filename, isPink) {
   const payload = {
     ...sp.api.file.createUploadSession.payload,
     description: 'Preview file',
@@ -161,7 +172,12 @@ async function createUploadSession(sp, file, dest, filename) {
   const options = getAuthorizedRequestOption({ method: sp.api.file.createUploadSession.method });
   options.body = JSON.stringify(payload);
 
-  const createdUploadSession = await fetch(`${sp.api.file.createUploadSession.baseURI}${dest}:/createUploadSession`, options);
+  let baseURI = sp.api.file.createUploadSession.baseURI;
+  if (isPink) {
+    baseURI = sp.api.file.createUploadSession.fgBaseURI;
+  }
+
+  const createdUploadSession = await fetch(`${baseURI}${dest}:/createUploadSession`, options);
   return createdUploadSession.ok ? createdUploadSession.json() : undefined;
 }
 
@@ -293,12 +309,16 @@ async function getMetadata(srcPath, file) {
   return metadata;
 }
 
-async function copyFile(srcPath, destinationFolder, newName) {
+async function copyFile(srcPath, destinationFolder, newName, isPink) {
   validateConnection();
-  await createFolder(destinationFolder);
+  await createFolder(destinationFolder, isPink);
   const { sp } = await getConfig();
-  const { baseURI } = sp.api.file.copy;
-  const rootFolder = baseURI.split('/').pop();
+  let { baseURI } = sp.api.file.copy;
+  let rootFolder = baseURI.split('/').pop();
+  if (isPink) {
+    const fgBaseURI = sp.api.file.copy.fgBaseURI;
+    rootFolder = fgBaseURI.split('/').pop();
+  }
 
   const payload = { ...sp.api.file.copy.payload, parentReference: { path: `${rootFolder}${destinationFolder}` } };
   if (newName) {
@@ -339,25 +359,29 @@ async function copyFileAndUpdateMetadata(srcPath, destinationFolder) {
   throw new Error(`Could not copy file ${destinationFolder}`);
 }
 
-async function saveFile(file, dest) {
+async function saveFile(file, dest, isPink) {
   try {
     validateConnection();
     const folder = getFolderFromPath(dest);
     const filename = getFileNameFromPath(dest);
-    await createFolder(folder);
+    await createFolder(folder, isPink);
     const { sp } = await getConfig();
     let uploadFileStatus = await createSessionAndUploadFile(sp, file, dest, filename);
     if (uploadFileStatus.locked) {
       await releaseUploadSession(sp, uploadFileStatus.sessionUrl);
       const lockedFileNewName = getLockedFileNewName(filename);
-      const spFileUrl = `${sp.api.file.get.baseURI}${dest}`;
+      let baseURI = sp.api.file.get.baseURI;
+      if (isPink) {
+        baseURI = sp.api.file.get.fgBaseURI;
+      }
+      const spFileUrl = `${baseURI}${dest}`;
       await renameFile(spFileUrl, lockedFileNewName);
       const newLockedFilePath = `${folder}/${lockedFileNewName}`;
       const copyFileStatus = await copyFile(newLockedFilePath, folder, filename);
       if (copyFileStatus) {
         uploadFileStatus = await createSessionAndUploadFile(sp, file, dest, filename);
         if (uploadFileStatus.success) {
-          await deleteFile(sp, `${sp.api.file.get.baseURI}${newLockedFilePath}`);
+          await deleteFile(sp, `${baseURI}${newLockedFilePath}`);
         }
       }
     }
