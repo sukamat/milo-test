@@ -10,21 +10,25 @@ const getFranklinReq = (url, request) => {
   return req;
 };
 
+const getFranklinResp = async (url, request, env) => {
+  url.hostname = env;
+  const req = getFranklinReq(url, request);
+  return await fetch(req);
+};
+
 const handleRequest = async (request, env, ctx) => {
   const color = request.headers.get('x-adobe-floodgate');
-  const resolvedEnv = color === 'pink' ? PINK_ENV : OG_ENV;
-
   const url = new URL(request.url);
-  url.hostname = resolvedEnv;
-  const req = getFranklinReq(url, request);
-  // TODO: set the following header if push invalidation is configured
-  // (see https://www.hlx.live/docs/setup-byo-cdn-push-invalidation#cloudflare)
-  // req.headers.set('x-push-invalidation', 'enabled');
-  let resp = await fetch(req);
-  if (!resp.ok) {
-    url.hostname = OG_ENV;
-    const ogReq = getFranklinReq(url, request);
-    resp = await fetch(ogReq);
+  let resp;
+
+  if (color === 'pink') {
+    resp = await getFranklinResp(url, request, PINK_ENV);
+    if (!resp.ok) {
+      // FG page does not exist. Fallback to page in regular tree.
+      resp = await getFranklinResp(url, request, OG_ENV);
+    }
+  } else {
+    resp = await getFranklinResp(url, request, OG_ENV);
   }
 
   resp = new Response(resp.body, resp);
