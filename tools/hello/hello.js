@@ -20,6 +20,14 @@ import {
   getHelixAdminConfig,
   LOC_CONFIG
 } from '../loc/config.js';
+import {
+  updateExcel,
+} from './excel.js';
+import {
+  iterateSharepointTree,
+  recursivelyFindAllDocxFilesInMilo,
+  recursivelyFindAllDocxFilesInPink,
+} from './sharepoint.js';
 
 const HLX_ADMIN_STATUS = 'https://admin.hlx.page/status';
 
@@ -124,13 +132,14 @@ async function getProjectData() {
       const urls = new Map();
       const filePaths = new Map();
       urlsData.forEach((urlRow) => {
-        const url = urlRow.urls;
+        const url = urlRow.URL;
         const docPath = getDocPathFromUrl(url);
         const childDocPath = getChildDocPath(docPath);
         //const fgDocPath = docPath;
         urls.set(url, {
           doc: {
             filePath: docPath,
+            url: url,
             fg: {
               url: getPinkUrl(url),
               sp: {},
@@ -138,6 +147,7 @@ async function getProjectData() {
           },
           childDoc: {
             filePath: childDocPath,
+            url: url,
             fg: {
               url: getPinkUrl(url),
               sp: {},
@@ -294,6 +304,7 @@ async function copyFilesToMiloPinkFolder() {
       status.success = copySuccess;
       status.srcPath = srcPath;
       status.dstPath = srcPath;
+      status.url = urlInfo.doc.url;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(`Error occurred when trying to copy to pink folder ${error.message}`);
@@ -308,6 +319,16 @@ async function copyFilesToMiloPinkFolder() {
     .filter((status) => !status.success)
     .map((status) => status?.srcPath || 'Path Info Not available');
 
+  // update proejct excel 
+  // const copyStatusValues = [];
+  // for (const obj of copyStatuses) {
+  //   console.log(`${obj.srcPath} : ${obj.success}`);
+  //   copyStatusValues.push([obj.url]);
+  // }
+  // loadingON('Update excel with copy statues...');
+  // await updateExcelTable(project.excelPath, 'URL', copyStatusValues);
+  // loadingON('Updated excel with copy statues...');
+
   if (failedCopies.length > 0 /*|| failedPreviews.length > 0*/) {
     let failureMessage = failedCopies.length > 0 ? `Failed to copy ${failedCopies} to child folder` : '';
     //failureMessage = failedPreviews.length > 0 ? `${failureMessage} Failed to preview ${failedPreviews}. Kindly manually preview these files before starting the project` : '';
@@ -319,9 +340,43 @@ async function copyFilesToMiloPinkFolder() {
 
 }
 
+async function updateExcelFile() {
+  updateExcel();
+}
+
+
+async function iterateTree() {
+  console.log('iterate tree button clicked');
+  //const res = await iterateSharepointTree();
+
+  const start = new Date();
+  console.log(start);
+  console.log('recurse start');
+  //const res = await recursivelyFindAllDocxFilesInMilo();
+  const res = await recursivelyFindAllDocxFilesInPink();
+  console.log('recurse end');
+  console.log(res);
+  console.log(`${(Date.now() - start) / 1000} seconds`);
+
+
+  // let something = [];
+  // something.push({ a: 'a', b: 'b' });
+  // something.push({ a: 'v', b: 'f' });
+  // something.push({ a: 'f', b: 'e' });
+  // console.log(something);
+
+}
+
+async function copyFolders() {
+  await copyFile('/drafts/sukamat/fg-test/folder', '/drafts/sukamat/fg-test', undefined, true);
+}
+
 function setListeners() {
   document.querySelector('#copyFiles button').addEventListener('click', copyFilesToChildFolder);
   document.querySelector('#copyFilesToPink button').addEventListener('click', copyFilesToMiloPinkFolder);
+  document.querySelector('#updateExcel button').addEventListener('click', updateExcelFile);
+  document.querySelector('#iterateTree button').addEventListener('click', iterateTree);
+  document.querySelector('#copyFolders button').addEventListener('click', copyFolders);
   document.querySelector('#loading').addEventListener('click', loadingOFF);
 }
 
@@ -483,7 +538,11 @@ async function displayProjectDetail() {
   // displayProjectStatuses(subprojects, finalRow);
   // $table.appendChild(finalRow);
 
-  container.appendChild($table);
+
+  // -- DISABLING FOR DEMO
+  // container.appendChild($table);
+  // -- DISABLING FOR DEMO
+
 
   // let hideIds = ['send', 'reload', 'updateFragments', 'copyToEn'];
   // let showIds = projectDetail.translationProjects.size > 0 ? ['refresh'] : [];
@@ -496,7 +555,9 @@ async function displayProjectDetail() {
   //   }
   // }
 
-  const showIds = ['copyFiles', 'copyFilesToPink'];
+  //const showIds = ['copyFiles', 'copyFilesToPink', 'updateExcel', 'iterateTree', 'copyFolders'];
+  //const showIds = ['iterateTree', 'copyFolders'];
+  const showIds = ['copyFolders'];
   showButtons(showIds);
   //hideButtons(hideIds);
 }

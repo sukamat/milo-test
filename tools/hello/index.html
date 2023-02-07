@@ -1,7 +1,7 @@
 <html lang="en">
 
 <head>
-  <title>Hello</title>
+  <title>Sharepoint</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="stylesheet" href="hello.css">
@@ -11,12 +11,12 @@
 
 <body>
   <header>
-    <h1 class="container">Hello</h1>
+    <h1 class="container" style="display: none;">Hello</h1>
   </header>
   <main>
     <div class="project-overview">
       <div class="container">
-        <h2 class="project-name">
+        <h2 class="project-name" style="display: none;">
           <span class="detail">Project</span>
           <span id="project-url"></span>
         </h2>
@@ -25,6 +25,15 @@
         </div>
         <div id="copyFilesToPink" class="hidden">
           <button type="button">Copy Files To Pink Folder</button>
+        </div>
+        <div id="updateExcel" class="hidden">
+          <button type="button">Update Excel</button>
+        </div>
+        <div id="iterateTree" class="hidden">
+          <button type="button">Iterate Sharepoint Tree</button>
+        </div>
+        <div id="copyFolders" class="hidden">
+          <button type="button">Copy Folder</button>
         </div>
       </div>
     </div>
