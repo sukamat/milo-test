@@ -47,7 +47,7 @@ async function findAllDocxInMilo(docFiles, docFolders, sharePointBaseURI, option
           if (fileObj.folder) {
             // it is a folder
             // find a better way to get the folder path
-            const folderPath = fileObj.parentReference.path.replace('/drive/root:/milo', '') + '/' + fileObj.name;
+            const folderPath = fileObj.parentReference.path.replace('/drive/root:/bacom', '') + '/' + fileObj.name;
             //console.log(fileObj);
             docFolders.push(folderPath);
           } else if (fileObj?.file?.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {

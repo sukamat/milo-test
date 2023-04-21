@@ -56,10 +56,10 @@ function validateConnection() {
 }
 
 function getAuthorizedRequestOption({
-  body = null,
-  json = true,
-  method = 'GET',
-} = {}) {
+                                      body = null,
+                                      json = true,
+                                      method = 'GET',
+                                    } = {}) {
   validateConnection();
   const bearer = `Bearer ${accessToken}`;
   const headers = new Headers();
@@ -309,7 +309,43 @@ async function getMetadata(srcPath, file) {
   return metadata;
 }
 
+async function copyFileWithWait(fetchUrl, options) {
+  let copySuccess = false;
+  await fetch(`${fetchUrl}`, options)
+    .then(async response => {
+      if (response.status === 429 || response.headers.get('Retry-After') || response.headers.get('RateLimit-Limit')) {
+        let delayTime;
+        if (response.headers.get('RateLimit-Limit')) {
+          delayTime = response.headers.get('RateLimit-Reset');
+          console.log(`Consume too many resources. Trying after ${limitResetTime} seconds.`);
+        } else {
+          delayTime = response.headers.get('Retry-After');
+          console.log(`Too many requests. Retry after ${delayTime} seconds.`);
+        }
+        if (!delayTime) delayTime = 30;
+        return new Promise(resolve => setTimeout(resolve, delayTime * 1000)).then(() => copyFileWithWait(fetchUrl, options));
+      } else if (response.ok) {
+        console.log('OK :: ' + fetchUrl);
+        const statusUrl = response.headers.get('Location');
+        let copyStatusJson = {};
+        while (!copySuccess && copyStatusJson.status !== 'failed') {
+          // eslint-disable-next-line no-await-in-loop
+          const status = await fetch(statusUrl);
+          if (status.ok) {
+            // eslint-disable-next-line no-await-in-loop
+            copyStatusJson = await status.json();
+            copySuccess = copyStatusJson.status === 'completed';
+          }
+        }
+      } else {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    });
+  return copySuccess;
+}
+
 async function copyFile(srcPath, destinationFolder, newName, isPink) {
+  console.log('in copy func');
   validateConnection();
   await createFolder(destinationFolder, isPink);
   const { sp } = await getConfig();
@@ -324,23 +360,19 @@ async function copyFile(srcPath, destinationFolder, newName, isPink) {
   if (newName) {
     payload.name = newName;
   }
+
+  const copyQueryParam = sp.api.file.copy.queryParam;
+  console.log(copyQueryParam);
+
   const options = getAuthorizedRequestOption({
     method: sp.api.file.copy.method,
     body: JSON.stringify(payload),
   });
-  const copyStatusInfo = await fetch(`${baseURI}${srcPath}:/copy`, options);
-  const statusUrl = copyStatusInfo.headers.get('Location');
-  let copySuccess = false;
-  let copyStatusJson = {};
-  while (!copySuccess && copyStatusJson.status !== 'failed') {
-    // eslint-disable-next-line no-await-in-loop
-    const status = await fetch(statusUrl);
-    if (status.ok) {
-      // eslint-disable-next-line no-await-in-loop
-      copyStatusJson = await status.json();
-      copySuccess = copyStatusJson.status === 'completed';
-    }
-  }
+
+  // TODO: handle 429 / rate-limit
+  const fetchUrl = `${baseURI}${srcPath}:/copy`;
+  console.log('fetching');
+  let copySuccess = await copyFileWithWait(fetchUrl, options);
   return copySuccess;
 }
 
@@ -443,6 +475,7 @@ async function addWorksheetToExcel(excelPath, worksheetName) {
 export {
   connect,
   copyFile,
+  copyFileWithWait,
   copyFileAndUpdateMetadata,
   getAccessToken,
   getAuthorizedRequestOption,

@@ -4,7 +4,7 @@ import {
   getPathFromUrl,
   getUrlInfo,
   loadingON,
-  loadingOFF
+  loadingOFF,
 } from '../loc/utils.js';
 import {
   connect as connectToSP,
@@ -77,10 +77,9 @@ function addOrAppendToMap(map, key, value) {
 
 // Child doc is where the source doc is copied to (child folder)
 function getChildDocPath(docPath) {
-  var prefix = docPath.substring(0, docPath.lastIndexOf("/") + 1);
-  var pageName = docPath.substring(docPath.lastIndexOf("/") + 1, docPath.length);
+  const prefix = docPath.substring(0, docPath.lastIndexOf("/") + 1);
+  const pageName = docPath.substring(docPath.lastIndexOf("/") + 1, docPath.length);
   return `${prefix}child/${pageName}`;
-
 }
 
 async function getProjectData() {
@@ -125,8 +124,8 @@ async function getProjectData() {
       }
       //return json;
 
-      this.title = json.project.data[0].title;
-      this.description = json.project.data[0].description;
+      //this.title = json.project.data[0].title;
+      //this.description = json.project.data[0].description;
 
       const urlsData = json.urls.data;
       const urls = new Map();
@@ -351,12 +350,14 @@ async function iterateTree() {
 
   const start = new Date();
   console.log(start);
-  console.log('recurse start');
-  //const res = await recursivelyFindAllDocxFilesInMilo();
-  const res = await recursivelyFindAllDocxFilesInPink();
-  console.log('recurse end');
+  console.log('start iteration :: ' + start);
+  const res = await recursivelyFindAllDocxFilesInMilo();
+  //const res = await recursivelyFindAllDocxFilesInPink();
+  const end = new Date();
+  console.log('end iteration :: ' + end);
+  console.log(`${(end - start) / 1000} seconds`);
+  console.log('output ::');
   console.log(res);
-  console.log(`${(Date.now() - start) / 1000} seconds`);
 
 
   // let something = [];
@@ -371,12 +372,58 @@ async function copyFolders() {
   await copyFile('/drafts/sukamat/fg-test/folder', '/drafts/sukamat/fg-test', undefined, true);
 }
 
+let count = 0;
+let pause = false;
+const DELAY_TIME = 5000; //5s
+
+async function copySpFiles() {
+  async function copyFiles(filePath) {
+    const status = { success: false };
+    console.log('copy started');
+    const copySuccess = await copyFile(filePath, '/drafts/sukamat/copy-to', undefined, false);
+    console.log('copy done');
+    status.success = copySuccess;
+    status.path = filePath;
+    return status;
+  }
+
+  const filePaths = ['/drafts/sukamat/copy-test/doc1.docx', '/drafts/sukamat/copy-test/doc2.docx'];
+  // const copyStatuses = await Promise.all(
+  //   filePaths.map((filePath) => copyFiles(filePath)),
+  // );
+
+  let copyStatuses;
+  for (let index = 0; index < filePaths.length; index += 1) {
+    count += 1;
+    if (count % 2 === 0) pause = true;
+    while (pause) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((res) => setTimeout(res, DELAY_TIME)).then(pause = false);
+      console.log(`waiting for ${DELAY_TIME / 1000} seconds`);
+    }
+    // eslint-disable-next-line no-await-in-loop
+    copyStatuses = await new Promise().then(copyFiles(filePaths[index]));
+  }
+  console.log(copyStatuses);
+}
+
+async function createFilesForStressTest() {
+  console.log('STARTED: creating multiple files for stress test');
+  for (let i = 1; i <= 500; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await copyFile('/drafts/sukamat/copy-test/doc1.docx', '/drafts/sukamat/stress-test', `doc${i}.docx`, false);
+  }
+  console.log('COMPLETE: creating multiple files for stress test');
+}
+
 function setListeners() {
   document.querySelector('#copyFiles button').addEventListener('click', copyFilesToChildFolder);
   document.querySelector('#copyFilesToPink button').addEventListener('click', copyFilesToMiloPinkFolder);
   document.querySelector('#updateExcel button').addEventListener('click', updateExcelFile);
   document.querySelector('#iterateTree button').addEventListener('click', iterateTree);
   document.querySelector('#copyFolders button').addEventListener('click', copyFolders);
+  document.querySelector('#copySpFiles button').addEventListener('click', copySpFiles);
+  document.querySelector('#createFilesForStressTest button').addEventListener('click', createFilesForStressTest);
   document.querySelector('#loading').addEventListener('click', loadingOFF);
 }
 
@@ -557,7 +604,7 @@ async function displayProjectDetail() {
 
   //const showIds = ['copyFiles', 'copyFilesToPink', 'updateExcel', 'iterateTree', 'copyFolders'];
   //const showIds = ['iterateTree', 'copyFolders'];
-  const showIds = ['copyFolders'];
+  const showIds = ['copyFolders', 'copySpFiles', 'createFilesForStressTest', 'iterateTree'];
   showButtons(showIds);
   //hideButtons(hideIds);
 }
