@@ -12,8 +12,8 @@
 /* global */
 import { getUrlInfo } from './utils.js';
 
-//const LOC_CONFIG = '/drafts/localization/configs/config.json';
-const LOC_CONFIG = '/drafts/localization/projects/sukamat/sukamat-loc-config.json';
+const LOC_CONFIG = '/drafts/localization/configs/config.json';
+// const LOC_CONFIG = '/drafts/localization/projects/sukamat/sukamat-loc-config.json';
 const DEFAULT_WORKFLOW = 'Standard';
 const GRAPH_API = 'https://graph.microsoft.com/v1.0';
 

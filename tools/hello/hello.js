@@ -13,6 +13,7 @@ import {
   saveFile,
   getFile,
   updateExcelTable,
+  copyFileAndUpdateMetadata,
 } from '../loc/sharepoint.js';
 import {
   getSharepointConfig,
@@ -409,11 +410,17 @@ async function copySpFiles() {
 
 async function createFilesForStressTest() {
   console.log('STARTED: creating multiple files for stress test');
-  for (let i = 1; i <= 500; i += 1) {
+  for (let i = 501; i <= 1000; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    await copyFile('/drafts/sukamat/copy-test/doc1.docx', '/drafts/sukamat/stress-test', `doc${i}.docx`, false);
+    await copyFile('/drafts/sukamat/stress-test-500/doc1.docx', '/drafts/sukamat/stress-test-1000', `doc${i}.docx`, false);
   }
   console.log('COMPLETE: creating multiple files for stress test');
+}
+
+async function createVersionForDoc() {
+  console.log('update metadata');
+  await copyFileAndUpdateMetadata('/drafts/sukamat/stress-test-500/doc1.docx', '/drafts/sukamat/copy-test');
+  console.log('update metadata complete');
 }
 
 function setListeners() {
@@ -424,6 +431,7 @@ function setListeners() {
   document.querySelector('#copyFolders button').addEventListener('click', copyFolders);
   document.querySelector('#copySpFiles button').addEventListener('click', copySpFiles);
   document.querySelector('#createFilesForStressTest button').addEventListener('click', createFilesForStressTest);
+  document.querySelector('#createVersionForDoc button').addEventListener('click', createVersionForDoc);
   document.querySelector('#loading').addEventListener('click', loadingOFF);
 }
 
@@ -604,7 +612,7 @@ async function displayProjectDetail() {
 
   //const showIds = ['copyFiles', 'copyFilesToPink', 'updateExcel', 'iterateTree', 'copyFolders'];
   //const showIds = ['iterateTree', 'copyFolders'];
-  const showIds = ['copyFolders', 'copySpFiles', 'createFilesForStressTest', 'iterateTree'];
+  const showIds = ['copyFolders', 'copySpFiles', 'createFilesForStressTest', 'iterateTree', 'createVersionForDoc'];
   showButtons(showIds);
   //hideButtons(hideIds);
 }

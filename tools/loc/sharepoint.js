@@ -46,6 +46,7 @@ async function connect() {
       }
     }
   }
+  console.log(accessToken);
   return connected;
 }
 
@@ -56,10 +57,10 @@ function validateConnection() {
 }
 
 function getAuthorizedRequestOption({
-                                      body = null,
-                                      json = true,
-                                      method = 'GET',
-                                    } = {}) {
+  body = null,
+  json = true,
+  method = 'GET',
+} = {}) {
   validateConnection();
   const bearer = `Bearer ${accessToken}`;
   const headers = new Headers();
@@ -281,11 +282,29 @@ async function getFileVersionInfo(filePath) {
   throw new Error(`Could not get file version ${filePath}`);
 }
 
+async function updateFileWithCustomMetadata(dest, metadata, customMetadata = {}) {
+  validateConnection();
+  const payload = {
+    sk_msg: 'test',
+  };
+  const { sp } = await getConfig();
+  const options = getAuthorizedRequestOption({
+    method: sp.api.file.update.method,
+    body: JSON.stringify(payload),
+  });
+  const updateMetadata = await fetch(`${sp.api.file.update.baseURI}${dest}:/listItem/fields`, options);
+  if (updateMetadata.ok) {
+    return updateMetadata.json();
+  }
+  throw new Error(`Could not update file with metadata ${metadata}`);
+}
+
 async function updateFile(dest, metadata, customMetadata = {}) {
   validateConnection();
   const payload = {
     RolloutVersion: metadata.rolloutVersion,
     Rollout: metadata.rolloutTime,
+    TestMD: 'sunil',
     ...customMetadata,
   };
   const { sp } = await getConfig();
@@ -345,7 +364,6 @@ async function copyFileWithWait(fetchUrl, options) {
 }
 
 async function copyFile(srcPath, destinationFolder, newName, isPink) {
-  console.log('in copy func');
   validateConnection();
   await createFolder(destinationFolder, isPink);
   const { sp } = await getConfig();
@@ -360,19 +378,23 @@ async function copyFile(srcPath, destinationFolder, newName, isPink) {
   if (newName) {
     payload.name = newName;
   }
-
-  const copyQueryParam = sp.api.file.copy.queryParam;
-  console.log(copyQueryParam);
-
   const options = getAuthorizedRequestOption({
     method: sp.api.file.copy.method,
     body: JSON.stringify(payload),
   });
-
-  // TODO: handle 429 / rate-limit
-  const fetchUrl = `${baseURI}${srcPath}:/copy`;
-  console.log('fetching');
-  let copySuccess = await copyFileWithWait(fetchUrl, options);
+  const copyStatusInfo = await fetch(`${baseURI}${srcPath}:/copy?@microsoft.graph.conflictBehavior=replace`, options);
+  const statusUrl = copyStatusInfo.headers.get('Location');
+  let copySuccess = false;
+  let copyStatusJson = {};
+  while (!copySuccess && copyStatusJson.status !== 'failed') {
+    // eslint-disable-next-line no-await-in-loop
+    const status = await fetch(statusUrl);
+    if (status.ok) {
+      // eslint-disable-next-line no-await-in-loop
+      copyStatusJson = await status.json();
+      copySuccess = copyStatusJson.status === 'completed';
+    }
+  }
   return copySuccess;
 }
 
@@ -385,6 +407,7 @@ async function copyFileAndUpdateMetadata(srcPath, destinationFolder) {
     if (copiedFile.ok) {
       const copiedFileJson = await copiedFile.json();
       await updateFile(`${destinationFolder}/${fileName}`, await getMetadata(srcPath, copiedFileJson));
+      // await updateFileWithCustomMetadata(`${destinationFolder}/${fileName}`, await getMetadata(srcPath, copiedFileJson));
       return copiedFileJson;
     }
   }
