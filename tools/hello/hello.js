@@ -410,12 +410,13 @@ async function copySpFiles() {
 
 async function createFilesForStressTest() {
   console.log('STARTED: creating multiple files for stress test');
-  for (let i = 501; i <= 1000; i += 1) {
+  for (let i = 2; i <= 500; i += 1) {
     // eslint-disable-next-line no-await-in-loop
-    await copyFile('/drafts/sukamat/large-200/doc1.docx', '/drafts/sukamat/large-1000', `doc${i}.docx`, false);
+    await copyFile('/drafts/sukamat/mix30k/700kb/a/doc1.docx', '/drafts/sukamat/mix30k/700kb/a', `doc${i}.docx`, false);
+    console.log(`created doc${i}.docx`);
 
     // eslint-disable-next-line no-await-in-loop, no-promise-executor-return
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   console.log('COMPLETE: creating multiple files for stress test');
 }
